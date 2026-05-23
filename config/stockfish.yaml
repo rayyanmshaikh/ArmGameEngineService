@@ -1,0 +1,7 @@
+path: third_party/stockfish/stockfish-windows-x86-64-avx2.exe
+skill_level: 20
+limit_strength: false
+elo: 1800
+threads: 4
+hash_mb: 128
+default_movetime_ms: 500
