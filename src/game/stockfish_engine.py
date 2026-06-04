@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from typing import Optional
@@ -36,7 +37,8 @@ class StockfishAdapter:
             self.path = env_path
         else:
             preferred = default_windows if sys.platform.startswith('win') else default_unix
-            self.path = preferred if os.path.isfile(preferred) else (discover_bundled_binary() or preferred)
+            system_binary = shutil.which('stockfish')
+            self.path = preferred if os.path.isfile(preferred) else (discover_bundled_binary() or system_binary or preferred)
 
         self.default_options = {
             'Skill Level': None,

@@ -16,6 +16,19 @@ class RobotDoneRequest(BaseModel):
     status: str
 
 
+@router.get('/health')
+def health():
+    return {
+        'status': 'ok',
+        'fen': GAME.fen(),
+        'turn': GAME.turn(),
+        'game_status': GAME.status(),
+        'waiting_for_robot': GAME.waiting_for_robot,
+        'last_human_move': GAME.last_human_move,
+        'last_ai_move': GAME.last_ai_move,
+    }
+
+
 @router.post('/start')
 def start():
     GAME.start()

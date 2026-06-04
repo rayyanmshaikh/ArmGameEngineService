@@ -1,0 +1,29 @@
+services:
+  game-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: arm-game-engine-service:test
+    container_name: arm-game-engine-service
+    ports:
+      - "8000:8000"
+    environment:
+      STOCKFISH_PATH: /usr/games/stockfish
+      ROBOT_SERVICE_URL: ""
+    restart: unless-stopped
+
+  vision-service:
+    build:
+      context: ../ArmVisionService
+      dockerfile: Dockerfile
+    image: arm-vision-service:test
+    container_name: arm-vision-service
+    ports:
+      - "8001:8000"
+    environment:
+      CAMERA_AUTO: "true"
+      CAMERA_INDEX: "AUTO"
+      AUTO_START: "false"
+      MOVE_POST_URL: "http://game-engine:8000/human-move"
+      DEBUG: "false"
+    restart: unless-stopped
