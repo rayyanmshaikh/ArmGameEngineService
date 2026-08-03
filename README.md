@@ -2,6 +2,8 @@
 
 Python chess game engine built on `python-chess` and Stockfish. It accepts human moves from ArmVisionService, chooses the AI reply, and exposes the current game state over FastAPI.
 
+![Game Engine CLI](assets/game%20engine%20cli.png)
+
 ## Local run
 
 Run the API:
