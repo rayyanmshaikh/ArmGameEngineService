@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from ..game.state import GAME
 from ..game.stockfish_engine import StockfishAdapter
@@ -16,17 +16,18 @@ class RobotDoneRequest(BaseModel):
     status: str
 
 
+def send_robot_move_task(ai_move: str):
+    payload = {'from': ai_move[:2], 'to': ai_move[2:], 'move': ai_move}
+    try:
+        send_move_to_robot(payload)
+    except Exception:
+        GAME.set_pending_feedback({'type': 'robot_error', 'message': 'failed to send to robot'})
+
+
 @router.get('/health')
 def health():
-    return {
-        'status': 'ok',
-        'fen': GAME.fen(),
-        'turn': GAME.turn(),
-        'game_status': GAME.status(),
-        'waiting_for_robot': GAME.waiting_for_robot,
-        'last_human_move': GAME.last_human_move,
-        'last_ai_move': GAME.last_ai_move,
-    }
+    state_snapshot = GAME.snapshot()
+    return {'status': 'ok', **state_snapshot}
 
 
 @router.post('/start')
@@ -36,7 +37,7 @@ def start():
 
 
 @router.post('/human-move')
-def human_move(req: HumanMoveRequest):
+def human_move(req: HumanMoveRequest, background_tasks: BackgroundTasks):
     ok, reason = GAME.apply_human_move(req.move)
     if not ok:
         raise HTTPException(status_code=400, detail=reason)
@@ -46,24 +47,22 @@ def human_move(req: HumanMoveRequest):
         ai_move = sf.choose_move(GAME.fen())
     except FileNotFoundError as e:
         # Stockfish not available
-        GAME.pending_feedback = {'type': 'ai_error', 'message': str(e)}
-        return {'status': 'ok', 'pending': GAME.pending_feedback}
+        pending = {'type': 'ai_error', 'message': str(e)}
+        GAME.set_pending_feedback(pending)
+        return {'status': 'ok', 'pending': pending}
 
     if not ai_move:
-        GAME.pending_feedback = {'type': 'ai_error', 'message': 'no move from stockfish'}
-        return {'status': 'ok', 'pending': GAME.pending_feedback}
+        pending = {'type': 'ai_error', 'message': 'no move from stockfish'}
+        GAME.set_pending_feedback(pending)
+        return {'status': 'ok', 'pending': pending}
 
     # apply AI move to internal board and set waiting_for_robot
     applied = GAME.apply_ai_move(ai_move)
     if not applied:
         raise HTTPException(status_code=500, detail='ai move illegal')
 
-    # send to robot (stub)
-    try:
-        send_move_to_robot({'from': ai_move[:2], 'to': ai_move[2:], 'move': ai_move})
-    except Exception:
-        # robot send failed; leave state waiting
-        GAME.pending_feedback = {'type': 'robot_error', 'message': 'failed to send to robot'}
+    # send to robot without blocking API response
+    background_tasks.add_task(send_robot_move_task, ai_move)
 
     return {'status': 'ok', 'ai_move': ai_move, 'fen': GAME.fen()}
 
@@ -71,22 +70,13 @@ def human_move(req: HumanMoveRequest):
 @router.post('/robot-done')
 def robot_done(req: RobotDoneRequest):
     # called by robot when it finishes moving
-    GAME.waiting_for_robot = False
-    GAME.pending_feedback = {'type': 'robot_move_complete', 'message': 'robot finished move', 'fen': GAME.fen()}
+    GAME.mark_robot_done()
     return {'status': 'ok'}
 
 
 @router.get('/state')
 def state():
-    return {
-        'fen': GAME.fen(),
-        'turn': GAME.turn(),
-        'last_human_move': GAME.last_human_move,
-        'last_ai_move': GAME.last_ai_move,
-        'game_status': GAME.status(),
-        'pending_feedback': GAME.pending_feedback,
-        'waiting_for_robot': GAME.waiting_for_robot,
-    }
+    return GAME.snapshot()
 
 
 @router.post('/stop')
